@@ -57,6 +57,41 @@ const PROVIDERS = {
   }
 };
 
+function validEmail(value) {
+  return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+async function verifyImapAndSmtp(settings, email, password) {
+  const imap = new ImapFlow({
+    host: settings.imap.host,
+    port: settings.imap.port,
+    secure: settings.imap.secure,
+    auth: { user: email, pass: password },
+    logger: false,
+    socketTimeout: 20000,
+    greetingTimeout: 15000
+  });
+
+  try {
+    await imap.connect();
+    await imap.mailboxOpen("INBOX");
+  } finally {
+    if (imap.usable) await imap.logout().catch(() => {});
+  }
+
+  const smtp = nodemailer.createTransport({
+    host: settings.smtp.host,
+    port: settings.smtp.port,
+    secure: settings.smtp.secure,
+    auth: { user: email, pass: password },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+    tls: { servername: settings.smtp.host }
+  });
+  await smtp.verify();
+}
+
 function accounts(req) {
   if (!Array.isArray(req.session.accounts)) req.session.accounts = [];
   return req.session.accounts;
@@ -244,8 +279,8 @@ app.get("/auth/google/callback", async (req, res) => {
 
 app.post("/api/connect/imap", async (req, res) => {
   const { provider, email, password, custom } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and app password are required." });
+  if (!validEmail(email) || typeof password !== "string" || !password.trim()) {
+    return res.status(400).json({ error: "Enter a valid email address and app-specific password." });
   }
   if (provider === "gmail") {
     return res.status(400).json({
@@ -273,32 +308,26 @@ app.post("/api/connect/imap", async (req, res) => {
     settings = preset;
   }
 
-  const client = new ImapFlow({
-    host: settings.imap.host,
-    port: settings.imap.port,
-    secure: settings.imap.secure,
-    auth: { user: email, pass: password },
-    logger: false
-  });
-
   try {
-    await client.connect();
-    await client.logout();
+    // The account is added only when both inbox access and sending access work.
+    await verifyImapAndSmtp(settings, email.trim(), password);
     const list = accounts(req);
     const existing = list.find((item) => item.provider === provider && item.email === email);
     if (existing) {
       existing.password = password;
       existing.settings = settings;
+      existing.email = email.trim();
     } else {
       list.push({
-        id: crypto.randomUUID(), type: "imap", provider, label, email, password, settings
+        id: crypto.randomUUID(), type: "imap", provider, label, email: email.trim(), password, settings
       });
     }
     res.json({ ok: true, accounts: list.map(publicAccount) });
   } catch (error) {
     console.error(error);
+    const code = error?.responseCode || error?.code || "AUTH_FAILED";
     res.status(401).json({
-      error: "Connection failed. Use an app-specific password and make sure IMAP is enabled."
+      error: `Login rejected by ${label || provider}. Check the email address, use an app-specific password, and confirm IMAP/SMTP access is enabled. (${code})`
     });
   }
 });

@@ -84,6 +84,12 @@ async function loadMessages() {
     const data = await request(`/api/messages?provider=${encodeURIComponent(currentProvider)}&limit=30`);
     messages = safeArray(data.messages);
     renderMessages(messages);
+    if (data.partial) {
+      const note = document.createElement("div");
+      note.className = "sync-warning";
+      note.textContent = "Some connected accounts could not sync. Reconnect them with a valid app password.";
+      $("#messageList").prepend(note);
+    }
   } catch (e) {
     $("#messageList").innerHTML = `<div class="empty-state"><p>${escapeHtml(e.message)}</p></div>`;
   }
@@ -156,7 +162,13 @@ $("#connectForm").onsubmit = async e => {
         } : undefined
       })
     });
-    accounts = safeArray(result.accounts); renderAccounts(); $("#accountDialog").close(); loadMessages();
+    accounts = safeArray(result.accounts);
+    renderAccounts();
+    $("#accountDialog").close();
+    currentProvider = provider;
+    $("#viewTitle").textContent = providerName(provider);
+    $$('[data-provider]').forEach(el => el.classList.toggle("active", el.dataset.provider === provider));
+    await loadMessages();
   } catch (e) { status($("#connectStatus"), e.message); }
 };
 $("#searchInput").oninput = e => {

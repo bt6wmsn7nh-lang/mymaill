@@ -1,3 +1,9 @@
+SYNC + LOGIN VALIDATION UPDATE
+- After a successful connection, the app immediately opens that provider section and loads inbox messages.
+- Yahoo, iCloud, Rambler, Outlook, and custom accounts are saved only after both IMAP inbox access and SMTP sending access are verified.
+- Invalid credentials are rejected instead of creating a fake connected account.
+- Gmail still uses Google OAuth because Google does not allow third-party password login.
+
 CRASH FIX
 - Prevents Cannot read properties of undefined (reading length).
 - Handles missing accounts, messages, and provider values safely.

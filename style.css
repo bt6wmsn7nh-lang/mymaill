@@ -26,3 +26,5 @@ dialog{width:min(650px,calc(100% - 28px));border:1px solid var(--line);border-ra
 .google-login-box{border:1px solid var(--line);border-radius:16px;padding:15px;background:rgba(255,255,255,.035)}.google-login-box>p{color:var(--muted);font-size:12px;line-height:1.5}.full{width:100%;margin-top:12px}
 #accountDialog{width:min(520px,calc(100% - 28px))}
 @media(max-width:720px){.floating-compose{bottom:88px;right:18px}.account-panel{display:none}.provider-tabs{padding-right:60px}}
+
+.sync-warning{margin:8px;padding:10px 12px;border:1px solid rgba(251,191,36,.35);background:rgba(251,191,36,.08);color:#fde68a;border-radius:12px;font-size:12px}
