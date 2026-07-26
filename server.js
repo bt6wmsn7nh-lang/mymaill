@@ -11,6 +11,9 @@ const { google } = require("googleapis");
 const path = require("path");
 
 const app = express();
+// Render and similar hosts terminate HTTPS at a reverse proxy.
+// Trusting one proxy hop allows secure session cookies to be saved correctly.
+app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 3000);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const GOOGLE_REDIRECT_URI =
@@ -24,6 +27,7 @@ app.use(
     secret: process.env.SESSION_SECRET || "development-only-change-me",
     resave: false,
     saveUninitialized: false,
+    proxy: true,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
@@ -61,7 +65,7 @@ function validEmail(value) {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
-async function verifyImapAndSmtp(settings, email, password) {
+async function verifyMailbox(settings, email, password) {
   const imap = new ImapFlow({
     host: settings.imap.host,
     port: settings.imap.port,
@@ -89,7 +93,17 @@ async function verifyImapAndSmtp(settings, email, password) {
     socketTimeout: 20000,
     tls: { servername: settings.smtp.host }
   });
-  await smtp.verify();
+  let smtpVerified = true;
+  let smtpWarning = "";
+  try {
+    await smtp.verify();
+  } catch (error) {
+    // A valid inbox login should still be usable even when a provider blocks
+    // SMTP verification. Sending will show a separate error if attempted.
+    smtpVerified = false;
+    smtpWarning = error?.response || error?.message || "SMTP verification failed.";
+  }
+  return { smtpVerified, smtpWarning };
 }
 
 function accounts(req) {
@@ -270,7 +284,13 @@ app.get("/auth/google/callback", async (req, res) => {
       email: profile.data.email,
       tokens
     });
-    res.redirect("/?connected=gmail");
+    req.session.save((saveError) => {
+      if (saveError) {
+        console.error(saveError);
+        return res.redirect("/?error=" + encodeURIComponent("Google connected, but the session could not be saved."));
+      }
+      res.redirect("/?connected=gmail");
+    });
   } catch (error) {
     console.error(error);
     res.redirect("/?error=" + encodeURIComponent(error.message));
@@ -309,8 +329,8 @@ app.post("/api/connect/imap", async (req, res) => {
   }
 
   try {
-    // The account is added only when both inbox access and sending access work.
-    await verifyImapAndSmtp(settings, email.trim(), password);
+    // The account is added only after the provider accepts IMAP inbox access.
+    const verification = await verifyMailbox(settings, email.trim(), password);
     const list = accounts(req);
     const existing = list.find((item) => item.provider === provider && item.email === email);
     if (existing) {
@@ -322,7 +342,18 @@ app.post("/api/connect/imap", async (req, res) => {
         id: crypto.randomUUID(), type: "imap", provider, label, email: email.trim(), password, settings
       });
     }
-    res.json({ ok: true, accounts: list.map(publicAccount) });
+    req.session.save((saveError) => {
+      if (saveError) {
+        console.error(saveError);
+        return res.status(500).json({ error: "The account was verified, but the login session could not be saved." });
+      }
+      res.json({
+        ok: true,
+        accounts: list.map(publicAccount),
+        smtpVerified: verification.smtpVerified,
+        warning: verification.smtpVerified ? "" : "Inbox connected, but sending may require different SMTP settings or provider approval."
+      });
+    });
   } catch (error) {
     console.error(error);
     const code = error?.responseCode || error?.code || "AUTH_FAILED";

@@ -164,6 +164,9 @@ $("#connectForm").onsubmit = async e => {
     });
     accounts = safeArray(result.accounts);
     renderAccounts();
+    if (result.warning) {
+      status($("#connectStatus"), result.warning, true);
+    }
     $("#accountDialog").close();
     currentProvider = provider;
     $("#viewTitle").textContent = providerName(provider);

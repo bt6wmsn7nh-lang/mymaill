@@ -1,3 +1,30 @@
+SESSION + INBOX SYNC FIX
+========================
+
+This version fixes the issue where a provider accepted the login, but the page
+then showed “Add a mail account to begin.”
+
+Changes:
+- Trusts Render's HTTPS reverse proxy.
+- Enables proxy-aware secure session cookies.
+- Forces the session to save before the login request finishes.
+- Saves Google sessions before redirecting back to the mailbox.
+- Validates IMAP inbox access before adding Yahoo/iCloud/Rambler/Outlook.
+- Loads the selected provider inbox immediately after successful login.
+- Allows a valid inbox connection even if SMTP verification is blocked.
+
+IMPORTANT:
+- iCloud and Yahoo usually require an app-specific password.
+- Render's default in-memory session storage resets when the server restarts.
+  For permanent logins, add Redis or a database-backed session store.
+
+TESTS PERFORMED:
+- server.js syntax check: passed
+- public/app.js syntax check: passed
+- Verified Render proxy trust and session-save code paths are present
+- Real provider authentication was not tested because no account credentials
+  were available.
+
 SYNC + LOGIN VALIDATION UPDATE
 - After a successful connection, the app immediately opens that provider section and loads inbox messages.
 - Yahoo, iCloud, Rambler, Outlook, and custom accounts are saved only after both IMAP inbox access and SMTP sending access are verified.
