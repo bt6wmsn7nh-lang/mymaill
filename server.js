@@ -45,7 +45,7 @@ app.get("/__version", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.use(express.static(path.join(__dirname, "public")));
