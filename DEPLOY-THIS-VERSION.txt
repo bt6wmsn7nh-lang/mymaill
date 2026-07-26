@@ -1,0 +1,10 @@
+DEPLOYMENT CHECK
+1. Commit/upload every file from this ZIP to the SAME GitHub branch Render uses.
+2. In Render Settings:
+   Root Directory: blank
+   Build Command: npm install
+   Start Command: npm start
+3. Use Manual Deploy > Clear build cache & deploy.
+4. Open /__version. It must say: MyMail root-fix 2026-07-26
+5. Then open /. It must show the MyMail interface.
+If /__version says Not Found, Render is not deploying this ZIP/repository revision.

@@ -40,6 +40,14 @@ app.use(
     }
   })
 );
+app.get("/__version", (req, res) => {
+  res.type("text/plain").send("MyMail root-fix 2026-07-26");
+});
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const PROVIDERS = {
