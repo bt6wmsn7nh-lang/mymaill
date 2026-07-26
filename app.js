@@ -7,6 +7,7 @@ function safeArray(value) { return Array.isArray(value) ? value : []; }
 function safeProvider(value) { return typeof value === "string" && value.trim() ? value.trim() : "custom"; }
 function providerInitial(value) { return safeProvider(value).charAt(0).toUpperCase() || "M"; }
 let currentProvider = "all";
+let googleQrPoll = null;
 
 async function request(url, options = {}) {
   const response = await fetch(url, {
@@ -49,7 +50,11 @@ async function boot() {
   const [config, session] = await Promise.all([request("/api/config"), request("/api/session")]);
   accounts = safeArray(session.accounts);
   $("#gmailButton").disabled = !config.gmailConfigured;
-  if (!config.gmailConfigured) $("#gmailButton small").textContent = "Add Google keys to .env";
+  $("#googleQrButton").disabled = !config.gmailConfigured;
+  if (!config.gmailConfigured) {
+    $("#gmailButton small").textContent = "Add Google keys in Render";
+    $("#googleQrButton small").textContent = "Google OAuth is not configured";
+  }
   renderAccounts();
   await loadMessages();
 }
@@ -140,9 +145,39 @@ $("#provider").onchange = e => {
   $("#passwordLoginBox").classList.toggle("hidden", gmail);
   $("#customFields").classList.toggle("hidden", e.target.value !== "custom");
 };
-$("#gmailButton").onclick = () => location.href = "/auth/google";
+$("#gmailButton").onclick = () => location.assign("/auth/google");
+$("#googleQrButton").onclick = async () => {
+  clearInterval(googleQrPoll);
+  status($("#connectStatus"), "Creating one-time QR code…", true);
+  try {
+    const data = await request("/api/google/qr", { method: "POST", body: "{}" });
+    $("#googleQrImage").src = data.qrDataUrl;
+    $("#googleQrLink").href = data.loginUrl;
+    $("#googleQrPanel").classList.remove("hidden");
+    $("#googleQrStatus").textContent = "Waiting for Google sign-in on your phone…";
+    status($("#connectStatus"), "Scan the code with your phone.", true);
+    googleQrPoll = setInterval(async () => {
+      try {
+        const result = await request(`/api/google/qr/${encodeURIComponent(data.pairId)}/status`);
+        if (result.status !== "complete") return;
+        clearInterval(googleQrPoll);
+        accounts = safeArray(result.accounts);
+        renderAccounts();
+        currentProvider = "gmail";
+        $("#accountDialog").close();
+        switchProvider("gmail");
+      } catch (error) {
+        clearInterval(googleQrPoll);
+        $("#googleQrStatus").textContent = error.message;
+        status($("#connectStatus"), error.message);
+      }
+    }, 1800);
+  } catch (error) {
+    status($("#connectStatus"), error.message);
+  }
+};
 $("#addAccountButton").onclick = () => $("#accountDialog").showModal();
-$("#closeAccount").onclick = () => $("#accountDialog").close();
+$("#closeAccount").onclick = () => { clearInterval(googleQrPoll); $("#accountDialog").close(); };
 $("#connectForm").onsubmit = async e => {
   e.preventDefault();
   const provider = $("#provider").value;

@@ -79,8 +79,18 @@
     <div id="googleLoginBox" class="google-login-box">
       <p>Google requires its secure sign-in page. Your Gmail password is never given to MyMail.</p>
       <button id="gmailButton" class="provider-button gmail" type="button">
-        <span class="provider-icon">G</span><span><b>Continue with Google</b><small>Secure OAuth sign-in</small></span><i>→</i>
+        <span class="provider-icon">G</span><span><b>Continue with Google</b><small>Google website, passkey supported</small></span><i>→</i>
       </button>
+      <button id="googleQrButton" class="provider-button qr-login" type="button">
+        <span class="provider-icon">▦</span><span><b>Scan QR with phone</b><small>One-time secure pairing</small></span><i>→</i>
+      </button>
+      <div id="googleQrPanel" class="qr-panel hidden">
+        <img id="googleQrImage" alt="Google sign-in QR code">
+        <b>Scan with your phone</b>
+        <p>Google opens on your phone. Choose a passkey or another Google-approved sign-in method.</p>
+        <a id="googleQrLink" target="_blank" rel="noopener">Open sign-in link</a>
+        <small id="googleQrStatus">Waiting for sign-in…</small>
+      </div>
     </div>
     <div id="passwordLoginBox" class="hidden">
       <label>Email address<input id="connectEmail" type="email" autocomplete="username" placeholder="you@example.com"></label>

@@ -20,6 +20,7 @@
     "helmet": "^8.0.0",
     "imapflow": "^1.0.181",
     "mailparser": "^3.7.2",
-    "nodemailer": "^6.10.0"
+    "nodemailer": "^6.10.0",
+    "qrcode": "^1.5.4"
   }
 }

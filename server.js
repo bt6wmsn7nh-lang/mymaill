@@ -8,6 +8,7 @@ const nodemailer = require("nodemailer");
 const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const { google } = require("googleapis");
+const QRCode = require("qrcode");
 const path = require("path");
 
 const app = express();
@@ -16,8 +17,11 @@ const app = express();
 app.set("trust proxy", 1);
 const PORT = Number(process.env.PORT || 3000);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const NORMALIZED_BASE_URL = BASE_URL.replace(/\/$/, "");
 const GOOGLE_REDIRECT_URI =
-  process.env.GOOGLE_REDIRECT_URI || `${BASE_URL}/auth/google/callback`;
+  process.env.GOOGLE_REDIRECT_URI || `${NORMALIZED_BASE_URL}/auth/google/callback`;
+const pendingGooglePairs = new Map();
+const PAIR_TTL_MS = 10 * 60 * 1000;
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json({ limit: "1mb" }));
@@ -125,6 +129,55 @@ function findAccount(req, id) {
   return accounts(req).find((item) => item.id === id);
 }
 
+
+function oauthConfigured() {
+  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+function signOAuthState(payload) {
+  const encoded = encodeBase64Url(JSON.stringify(payload));
+  const secret = process.env.SESSION_SECRET || "development-only-change-me";
+  const signature = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+function verifyOAuthState(value) {
+  const [encoded, signature] = String(value || "").split(".");
+  if (!encoded || !signature) throw new Error("Invalid Google login state.");
+  const secret = process.env.SESSION_SECRET || "development-only-change-me";
+  const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error("Invalid Google login state.");
+  const payload = JSON.parse(decodeBase64Url(encoded));
+  if (!payload.exp || Date.now() > payload.exp) throw new Error("Google login expired. Create a new QR code.");
+  return payload;
+}
+
+function makeGoogleAccount(email, tokens) {
+  return {
+    id: crypto.randomUUID(), type: "gmail", provider: "gmail",
+    label: "Gmail", email, tokens
+  };
+}
+
+function addOrUpdateGoogleAccount(list, account) {
+  const existing = list.find((item) => item.provider === "gmail" && item.email === account.email);
+  if (existing) {
+    existing.tokens = account.tokens;
+    return existing;
+  }
+  list.push(account);
+  return account;
+}
+
+function cleanupPairs() {
+  const now = Date.now();
+  for (const [id, pair] of pendingGooglePairs.entries()) {
+    if (pair.expiresAt <= now) pendingGooglePairs.delete(id);
+  }
+}
+
 function googleOAuthClient() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -226,7 +279,7 @@ app.get("/api/health", (req, res) => {
     googleConfigured: Boolean(
       process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
     ),
-    baseUrl: BASE_URL,
+    baseUrl: NORMALIZED_BASE_URL,
     googleRedirectUri: GOOGLE_REDIRECT_URI
   });
 });
@@ -234,7 +287,7 @@ app.get("/api/health", (req, res) => {
 app.get("/api/config", (req, res) => {
   res.json({
     customDomain: process.env.CUSTOM_DOMAIN || "mymail.com",
-    gmailConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    gmailConfigured: oauthConfigured(),
     providers: [
       { id: "gmail", label: "Gmail", auth: "oauth" },
       ...Object.entries(PROVIDERS).map(([id, value]) => ({
@@ -249,14 +302,28 @@ app.get("/api/session", (req, res) => {
   res.json({ accounts: accounts(req).map(publicAccount) });
 });
 
-app.get("/auth/google", (req, res) => {
-  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return res.redirect("/?error=" + encodeURIComponent("Google OAuth is not configured in .env."));
+app.get(["/auth/google", "/auth/google/", "/login/google", "/google"], (req, res) => {
+  if (!oauthConfigured()) {
+    return res.redirect("/?error=" + encodeURIComponent("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render."));
   }
+  const pairId = typeof req.query.pair === "string" ? req.query.pair : "";
+  if (pairId) {
+    cleanupPairs();
+    const pair = pendingGooglePairs.get(pairId);
+    if (!pair || pair.expiresAt <= Date.now()) {
+      return res.redirect("/?error=" + encodeURIComponent("That QR login expired. Create a new QR code."));
+    }
+  }
+  const state = signOAuthState({
+    pairId: pairId || null,
+    nonce: crypto.randomBytes(16).toString("hex"),
+    exp: Date.now() + PAIR_TTL_MS
+  });
   const client = googleOAuthClient();
   res.redirect(client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
+    prompt: "consent select_account",
+    state,
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.send",
@@ -265,25 +332,60 @@ app.get("/auth/google", (req, res) => {
   }));
 });
 
+app.post("/api/google/qr", async (req, res) => {
+  if (!oauthConfigured()) {
+    return res.status(503).json({ error: "Google OAuth is not configured in Render." });
+  }
+  cleanupPairs();
+  const pairId = crypto.randomBytes(24).toString("base64url");
+  const expiresAt = Date.now() + PAIR_TTL_MS;
+  pendingGooglePairs.set(pairId, { status: "pending", expiresAt, account: null });
+  const loginUrl = `${NORMALIZED_BASE_URL}/auth/google?pair=${encodeURIComponent(pairId)}`;
+  const qrDataUrl = await QRCode.toDataURL(loginUrl, {
+    errorCorrectionLevel: "M", margin: 1, width: 320
+  });
+  res.json({ pairId, loginUrl, qrDataUrl, expiresAt });
+});
+
+app.get("/api/google/qr/:pairId/status", (req, res) => {
+  cleanupPairs();
+  const pair = pendingGooglePairs.get(req.params.pairId);
+  if (!pair) return res.status(404).json({ error: "QR login expired. Create a new code." });
+  if (pair.status !== "complete" || !pair.account) {
+    return res.json({ status: "pending", expiresAt: pair.expiresAt });
+  }
+  const list = accounts(req);
+  addOrUpdateGoogleAccount(list, pair.account);
+  req.session.save((error) => {
+    if (error) return res.status(500).json({ error: "Google connected, but this browser session could not be saved." });
+    pendingGooglePairs.delete(req.params.pairId);
+    res.json({ status: "complete", accounts: list.map(publicAccount) });
+  });
+});
+
 app.get("/auth/google/callback", async (req, res) => {
   try {
     if (!req.query.code) throw new Error("Missing Google authorization code.");
+    const state = verifyOAuthState(req.query.state);
     const client = googleOAuthClient();
     const { tokens } = await client.getToken(String(req.query.code));
     client.setCredentials(tokens);
     const oauth2 = google.oauth2({ version: "v2", auth: client });
     const profile = await oauth2.userinfo.get();
+    if (!profile.data.email) throw new Error("Google did not return an email address.");
+    const account = makeGoogleAccount(profile.data.email, tokens);
+
+    if (state.pairId) {
+      cleanupPairs();
+      const pair = pendingGooglePairs.get(state.pairId);
+      if (!pair) throw new Error("The QR login expired before authorization finished.");
+      pair.status = "complete";
+      pair.account = account;
+      return res.send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Google connected</title><style>body{font-family:system-ui;background:#090b18;color:white;display:grid;place-items:center;min-height:100vh;margin:0}.card{max-width:460px;padding:32px;border:1px solid #303755;border-radius:22px;background:#12162a;text-align:center}h1{color:#86efac}</style><div class="card"><h1>Google connected</h1><p>${profile.data.email.replace(/[&<>"']/g, "")}</p><p>You can close this page. MyMail will finish signing in on your computer.</p></div>`);
+    }
+
     const list = accounts(req);
-    const existing = list.find((item) => item.provider === "gmail" && item.email === profile.data.email);
-    if (existing) existing.tokens = tokens;
-    else list.push({
-      id: crypto.randomUUID(),
-      type: "gmail",
-      provider: "gmail",
-      label: "Gmail",
-      email: profile.data.email,
-      tokens
-    });
+    addOrUpdateGoogleAccount(list, account);
     req.session.save((saveError) => {
       if (saveError) {
         console.error(saveError);
@@ -295,6 +397,16 @@ app.get("/auth/google/callback", async (req, res) => {
     console.error(error);
     res.redirect("/?error=" + encodeURIComponent(error.message));
   }
+});
+
+app.get("/auth/status", (req, res) => {
+  res.json({
+    ok: true,
+    googleConfigured: oauthConfigured(),
+    startRoute: `${NORMALIZED_BASE_URL}/auth/google`,
+    callbackRoute: GOOGLE_REDIRECT_URI,
+    exactAuthorizedRedirectUri: GOOGLE_REDIRECT_URI
+  });
 });
 
 app.post("/api/connect/imap", async (req, res) => {
@@ -485,6 +597,16 @@ app.post("/api/send", async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "The message could not be sent." });
   }
+});
+
+app.use("/auth", (req, res) => {
+  res.status(404).json({
+    error: "Authentication route not found.",
+    requestedPath: req.originalUrl,
+    expectedGoogleStart: "/auth/google",
+    expectedGoogleCallback: "/auth/google/callback",
+    deploymentHint: "Deploy as a Render Web Service with npm start, not as a Static Site."
+  });
 });
 
 app.get("*", (req, res, next) => {
