@@ -145,7 +145,14 @@ $("#provider").onchange = e => {
   $("#passwordLoginBox").classList.toggle("hidden", gmail);
   $("#customFields").classList.toggle("hidden", e.target.value !== "custom");
 };
-$("#gmailButton").onclick = () => location.assign("/auth/google");
+$("#gmailButton").onclick = async () => {
+  try {
+    const data = await request("/api/google/start");
+    location.assign(data.url || "/auth/google");
+  } catch (error) {
+    alert(error.message + "\n\nOpen /__backend on your Render URL. If it says Not Found, redeploy as a Node Web Service—not a Static Site.");
+  }
+};
 $("#googleQrButton").onclick = async () => {
   clearInterval(googleQrPoll);
   status($("#connectStatus"), "Creating one-time QR code…", true);

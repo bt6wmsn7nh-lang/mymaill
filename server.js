@@ -302,6 +302,19 @@ app.get("/api/session", (req, res) => {
   res.json({ accounts: accounts(req).map(publicAccount) });
 });
 
+app.get("/api/google/start", (req, res) => {
+  if (!oauthConfigured()) {
+    return res.status(503).json({
+      error: "Google OAuth is not configured. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REDIRECT_URI in Render."
+    });
+  }
+  res.json({ url: "/auth/google" });
+});
+
+app.get("/__backend", (req, res) => {
+  res.type("text/plain").send("MyMail Node backend is running");
+});
+
 app.get(["/auth/google", "/auth/google/", "/login/google", "/google"], (req, res) => {
   if (!oauthConfigured()) {
     return res.redirect("/?error=" + encodeURIComponent("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render."));

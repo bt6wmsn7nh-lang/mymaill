@@ -1,3 +1,33 @@
+IMPORTANT — FIXING RENDER "NOT FOUND"
+=======================================
+
+The Google route is included in server.js. If /auth/google says Not Found,
+Render is not running this Node server. A Static Site cannot run OAuth routes.
+
+USE A NEW RENDER WEB SERVICE:
+1. In Render, click New + > Web Service.
+2. Upload/push the contents of this ZIP with server.js and package.json at the repository root.
+3. Runtime: Node
+4. Root Directory: leave blank
+5. Build Command: npm install
+6. Start Command: npm start
+7. Publish Directory: leave blank
+
+DO NOT choose Static Site. Changing files inside an existing Static Site does
+not turn it into a Web Service. Create a new Web Service or use render.yaml as
+a Blueprint.
+
+TEST IN THIS ORDER:
+- https://YOUR-SERVICE.onrender.com/__backend
+  Must say: MyMail Node backend is running
+- https://YOUR-SERVICE.onrender.com/api/health
+  Must return JSON with ok:true
+- https://YOUR-SERVICE.onrender.com/auth/google
+  Must redirect to Google
+
+If the first URL says Not Found, stop: it is a Render service-type/root-folder
+problem, not a Google OAuth problem.
+
 MYMAIL GOOGLE OAUTH + QR/PASSKEY FIX
 ==================================
 
