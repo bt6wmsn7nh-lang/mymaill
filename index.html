@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#090b18"><title>MyMail Cloud</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="aurora aurora-one"></div><div class="aurora aurora-two"></div><div class="noise"></div>
+
+<main class="mail-app">
+  <aside class="sidebar glass">
+    <div class="side-brand"><div class="logo small">M</div><b>MyMail</b></div>
+    <button id="addAccountButton" class="compose">＋ Add account</button>
+    <nav id="folderNav">
+      <button class="nav-item active" data-provider="all">▣ <span>All Mail</span></button>
+      <button class="nav-item" data-provider="gmail">G <span>Google</span></button>
+      <button class="nav-item" data-provider="icloud">☁ <span>iCloud</span></button>
+      <button class="nav-item" data-provider="yahoo">Y <span>Yahoo</span></button>
+      <button class="nav-item" data-provider="rambler">R <span>Rambler</span></button>
+      <button class="nav-item" data-provider="outlook">O <span>Outlook</span></button>
+      <button class="nav-item" data-provider="custom">✉ <span>Other mail</span></button>
+    </nav>
+    <div class="account-panel">
+      <small>CONNECTED ACCOUNTS</small>
+      <div id="accountList"></div>
+    </div>
+    <button id="disconnectAll" class="logout">Disconnect all</button>
+  </aside>
+
+  <section class="mail-column glass">
+    <header class="topbar">
+      <div><span class="eyebrow">UNIFIED INBOX</span><h2 id="viewTitle">All Mail</h2></div>
+      <div class="top-actions">
+        <input id="searchInput" type="search" placeholder="Search loaded mail">
+        <button id="refreshButton" class="icon-button">↻</button>
+      </div>
+    </header>
+    <div id="providerTabs" class="provider-tabs">
+      <button class="provider-tab active" data-provider="all">All Mail</button>
+      <button class="provider-tab" data-provider="gmail">Google</button>
+      <button class="provider-tab" data-provider="icloud">iCloud</button>
+      <button class="provider-tab" data-provider="yahoo">Yahoo</button>
+      <button class="provider-tab" data-provider="rambler">Rambler</button>
+      <button class="provider-tab" data-provider="outlook">Outlook</button>
+      <button class="provider-tab" data-provider="custom">Other</button>
+    </div>
+    <div id="messageList" class="message-list"></div>
+  </section>
+
+  <section class="reader glass">
+    <div id="readerEmpty" class="reader-empty">
+      <div class="mail-art">✉</div><h3>Select a message</h3><p>Your email will appear here.</p>
+    </div>
+    <article id="readerContent" class="hidden">
+      <button id="closeReader" class="mobile-close">← Back</button>
+      <span id="readDate" class="read-date"></span><h2 id="readSubject"></h2>
+      <div class="read-meta"><b id="readFrom"></b><span id="readTo"></span></div>
+      <pre id="readBody"></pre>
+    </article>
+  </section>
+</main>
+
+<button id="floatingCompose" class="floating-compose">＋ Compose</button>
+
+<dialog id="accountDialog">
+  <form id="connectForm">
+    <header><div><span class="eyebrow">CONNECT MAIL</span><h2>Add an account</h2></div><button id="closeAccount" type="button">×</button></header>
+    <label>Mail service
+      <select id="provider">
+        <option value="gmail">Gmail / Google</option>
+        <option value="icloud">iCloud</option>
+        <option value="yahoo">Yahoo</option>
+        <option value="rambler">Rambler</option>
+        <option value="outlook">Outlook</option>
+        <option value="custom">Other IMAP / SMTP</option>
+      </select>
+    </label>
+    <div id="googleLoginBox" class="google-login-box">
+      <p>Google requires its secure sign-in page. Your Gmail password is never given to MyMail.</p>
+      <button id="gmailButton" class="provider-button gmail" type="button">
+        <span class="provider-icon">G</span><span><b>Continue with Google</b><small>Secure OAuth sign-in</small></span><i>→</i>
+      </button>
+    </div>
+    <div id="passwordLoginBox" class="hidden">
+      <label>Email address<input id="connectEmail" type="email" autocomplete="username" placeholder="you@example.com"></label>
+      <label>App password<input id="connectPassword" type="password" autocomplete="current-password" placeholder="App-specific password"></label>
+      <div id="customFields" class="custom-fields hidden">
+        <div class="two-col"><label>IMAP host<input id="imapHost" placeholder="imap.example.com"></label><label>Port<input id="imapPort" type="number" value="993"></label></div>
+        <label class="check"><input id="imapSecure" type="checkbox" checked> Secure IMAP</label>
+        <div class="two-col"><label>SMTP host<input id="smtpHost" placeholder="smtp.example.com"></label><label>Port<input id="smtpPort" type="number" value="465"></label></div>
+        <label class="check"><input id="smtpSecure" type="checkbox" checked> Secure SMTP</label>
+      </div>
+      <button class="primary full" type="submit">Connect account</button>
+    </div>
+    <div id="connectStatus" class="status"></div>
+  </form>
+</dialog>
+
+<dialog id="composeDialog">
+  <form id="sendForm">
+    <header><div><span class="eyebrow">NEW MESSAGE</span><h2>Compose</h2></div><button id="closeCompose" type="button">×</button></header>
+    <label>Send from<select id="sendAccount" required></select></label>
+    <label>To<input id="sendTo" type="email" required placeholder="friend@example.com"></label>
+    <label>Subject<input id="sendSubject" placeholder="What is this about?"></label>
+    <label>Message<textarea id="sendBody" required placeholder="Write your message…"></textarea></label>
+    <footer><span id="sendStatus"></span><button class="primary" type="submit">Send message ➤</button></footer>
+  </form>
+</dialog>
+<script src="/app.js"></script>
+</body></html>
