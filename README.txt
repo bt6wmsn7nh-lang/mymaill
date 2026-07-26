@@ -1,3 +1,7 @@
+CRASH FIX
+- Prevents Cannot read properties of undefined (reading length).
+- Handles missing accounts, messages, and provider values safely.
+
 LOGIN FIX EDITION
 =================
 

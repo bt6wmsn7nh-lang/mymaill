@@ -2,6 +2,10 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 let accounts = [];
 let messages = [];
+
+function safeArray(value) { return Array.isArray(value) ? value : []; }
+function safeProvider(value) { return typeof value === "string" && value.trim() ? value.trim() : "custom"; }
+function providerInitial(value) { return safeProvider(value).charAt(0).toUpperCase() || "M"; }
 let currentProvider = "all";
 
 async function request(url, options = {}) {
@@ -43,25 +47,32 @@ async function boot() {
     status($("#connectStatus"), params.get("error"));
   }
   const [config, session] = await Promise.all([request("/api/config"), request("/api/session")]);
-  accounts = session.accounts || [];
+  accounts = safeArray(session.accounts);
   $("#gmailButton").disabled = !config.gmailConfigured;
   if (!config.gmailConfigured) $("#gmailButton small").textContent = "Add Google keys to .env";
   renderAccounts();
   await loadMessages();
 }
 function renderAccounts() {
-  $("#accountList").innerHTML = accounts.length ? accounts.map(a => `
+  accounts = safeArray(accounts);
+  $("#accountList").innerHTML = accounts.length ? accounts.map(a => {
+    a = a || {};
+    const provider = safeProvider(a.provider);
+    return `
     <div class="connected-account">
-      <span class="account-badge ${escapeHtml(a.provider)}">${escapeHtml(a.provider[0].toUpperCase())}</span>
-      <div><b>${escapeHtml(a.email)}</b><small>${escapeHtml(providerName(a.provider))}</small></div>
+      <span class="account-badge ${escapeHtml(provider)}">${escapeHtml(providerInitial(provider))}</span>
+      <div><b>${escapeHtml(a.email)}</b><small>${escapeHtml(providerName(provider))}</small></div>
       <button data-remove="${escapeHtml(a.id)}" title="Remove">×</button>
-    </div>`).join("") : '<p class="no-accounts">No accounts connected.</p>';
-  $("#sendAccount").innerHTML = accounts.map(a =>
-    `<option value="${escapeHtml(a.id)}">${escapeHtml(a.email)} — ${escapeHtml(providerName(a.provider))}</option>`
-  ).join("");
+    </div>`;
+  }).join("") : '<p class="no-accounts">No accounts connected.</p>';
+  $("#sendAccount").innerHTML = accounts.map(a => {
+    a = a || {};
+    const provider = safeProvider(a.provider);
+    return `<option value="${escapeHtml(a.id)}">${escapeHtml(a.email || "Unknown account")} — ${escapeHtml(providerName(provider))}</option>`;
+  }).join("");
   $$("[data-remove]").forEach(btn => btn.onclick = async () => {
     const result = await request(`/api/accounts/${encodeURIComponent(btn.dataset.remove)}`, {method:"DELETE"});
-    accounts = result.accounts; renderAccounts(); loadMessages();
+    accounts = safeArray(result.accounts); renderAccounts(); loadMessages();
   });
 }
 async function loadMessages() {
@@ -71,24 +82,29 @@ async function loadMessages() {
   if (!accounts.length) return;
   try {
     const data = await request(`/api/messages?provider=${encodeURIComponent(currentProvider)}&limit=30`);
-    messages = data.messages || [];
+    messages = safeArray(data.messages);
     renderMessages(messages);
   } catch (e) {
     $("#messageList").innerHTML = `<div class="empty-state"><p>${escapeHtml(e.message)}</p></div>`;
   }
 }
 function renderMessages(items) {
+  items = safeArray(items);
   if (!items.length) {
     $("#messageList").innerHTML = `<div class="empty-state"><p>No ${escapeHtml(providerName(currentProvider))} messages found.</p></div>`;
     return;
   }
-  $("#messageList").innerHTML = items.map(m => `
+  $("#messageList").innerHTML = items.map(m => {
+    m = m || {};
+    const provider = safeProvider(m.provider);
+    return `
     <article class="message" data-account="${escapeHtml(m.accountId)}" data-id="${escapeHtml(m.id)}">
       <div class="message-top"><b>${escapeHtml(m.from || "Unknown sender")}</b><time>${escapeHtml(formatDate(m.date))}</time></div>
-      <div class="message-provider"><span class="account-badge ${escapeHtml(m.provider)}">${escapeHtml(m.provider[0].toUpperCase())}</span>${escapeHtml(m.accountEmail)}</div>
+      <div class="message-provider"><span class="account-badge ${escapeHtml(provider)}">${escapeHtml(providerInitial(provider))}</span>${escapeHtml(m.accountEmail)}</div>
       <h3>${escapeHtml(m.subject || "(No subject)")}</h3>
       <p>${escapeHtml(m.snippet || "Open to read this message.")}</p>
-    </article>`).join("");
+    </article>`;
+  }).join("");
   $$(".message").forEach(el => el.onclick = () => openMessage(el.dataset.account, el.dataset.id));
 }
 async function openMessage(accountId, id) {
@@ -140,12 +156,12 @@ $("#connectForm").onsubmit = async e => {
         } : undefined
       })
     });
-    accounts = result.accounts; renderAccounts(); $("#accountDialog").close(); loadMessages();
+    accounts = safeArray(result.accounts); renderAccounts(); $("#accountDialog").close(); loadMessages();
   } catch (e) { status($("#connectStatus"), e.message); }
 };
 $("#searchInput").oninput = e => {
   const q = e.target.value.toLowerCase();
-  renderMessages(messages.filter(m => [m.from,m.subject,m.snippet,m.accountEmail].join(" ").toLowerCase().includes(q)));
+  renderMessages(safeArray(messages).filter(m => [m?.from,m?.subject,m?.snippet,m?.accountEmail].join(" ").toLowerCase().includes(q)));
 };
 $("#refreshButton").onclick = loadMessages;
 $("#closeReader").onclick = () => $(".reader").classList.remove("open");
